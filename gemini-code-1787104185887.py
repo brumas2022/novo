@@ -12,7 +12,7 @@ from streamlit_gsheets import GSheetsConnection
 # -----------------------------------------------------------------------------
 st.set_page_config(
     page_title="Gestão de Licenciamento Ambiental",
-    page_icon="🌱",
+    page_icon="",
     layout="wide"
 )
 
@@ -142,7 +142,7 @@ USUARIOS_VALIDOS = {
 }
 
 if st.session_state.usuario_logado is None:
-    st.markdown("<h1 style='text-align: center;'>🌱 Sistema de Licenciamento Ambiental</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>Sistema de Licenciamento Ambiental</h1>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
@@ -173,7 +173,7 @@ def autosave_if_laura():
 # BARRA LATERAL (NAV E STATUS)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.title("Gestão de Licenciamento")
+    ##st.title("Gestão de Licenciamento")
     st.image("logo_file.jpg", use_container_width=True)
     st.markdown(f"👤 **Usuário:** `{st.session_state.usuario_logado}`")
     
