@@ -173,7 +173,8 @@ def autosave_if_laura():
 # BARRA LATERAL (NAV E STATUS)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.title("🌱 Licenciamento")
+    st.title("Gestão de Licenciamento")
+    st.image(logo_file)
     st.markdown(f"👤 **Usuário:** `{st.session_state.usuario_logado}`")
     
     if st.session_state.usuario_logado == "laura_nazario":
