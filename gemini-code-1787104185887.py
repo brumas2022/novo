@@ -174,7 +174,7 @@ def autosave_if_laura():
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.title("Gestão de Licenciamento")
-    st.image(logo_file, use_container_width=True)
+    st.image("logo_file", use_container_width=True)
     st.markdown(f"👤 **Usuário:** `{st.session_state.usuario_logado}`")
     
     if st.session_state.usuario_logado == "laura_nazario":
