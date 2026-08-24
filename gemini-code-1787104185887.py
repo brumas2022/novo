@@ -205,7 +205,7 @@ with st.sidebar:
 # 1. CADASTRO DE EMPRESAS
 # -----------------------------------------------------------------------------
 if menu_principal == "🏢 Cadastros de Empresas":
-    st.title("Gestão de Empresas (Clientes)")
+    st.title("Cadastro de Empresas")
     sub_menu = st.radio("Selecione uma ação:", ["Inserir Empresa", "Editar Empresa", "Remover Empresa"], horizontal=True)
 
     if sub_menu == "Inserir Empresa":
