@@ -271,6 +271,21 @@ elif menu_principal == "📜 Regras de Licenças & Docs":
     st.title("📜 Tipos de Licença, Prazos e Documentos")
     sub_menu_lic = st.radio("Selecione uma ação:", ["Inserir Licença", "Editar Licença"], horizontal=True)
 
+    LISTA_DOCS_ADM = (
+        "• CPF e RG Interessado\n"
+        "• Comprovante de Endereço Interessado\n"
+        "• Cartão CNPJ\n"
+        "• Cartão IE\n"
+        "• Contrato Social\n"
+        "• Última Alteração Contrato Social\n"
+        "• Certidão de Uso e Ocupação do Solo ou Viabilidade Juscemat\n"
+        "• Alvará de Funcionamento\n"
+        "• Alvará da Vigilância Sanitária\n"
+        "• Alvará do Corpo de Bombeiros\n"
+        "• Matrícula da Área\n"
+        "• Comprovante de Endereço Empreendimento"
+    )
+
     if sub_menu_lic == "Inserir Licença":
         st.subheader("Adicionar Novo Tipo de Licença")
         with st.form("form_add_licenca"):
@@ -280,11 +295,14 @@ elif menu_principal == "📜 Regras de Licenças & Docs":
             
             st.markdown("**Exigência de Documentos:**")
             doc_admin = st.checkbox("Documentos Administrativos")
+            
+            if doc_admin:
+                st.info(f"**Documentos Administrativos necessários:**\n\n{LISTA_DOCS_ADM}")
+
             doc_tecnico = st.checkbox("Documentos Técnicos")
             
             submitted = st.form_submit_button("Salvar Tipo de Licença")
             if submitted and sigla and nome_lic:
-                # Monta a lista de tipos de documentos selecionados
                 docs_selecionados = []
                 if doc_admin:
                     docs_selecionados.append("Administrativos")
@@ -309,7 +327,6 @@ elif menu_principal == "📜 Regras de Licenças & Docs":
             licenca_sel_sigla = st.selectbox("Selecione a licença para editar:", [t["sigla"] for t in st.session_state.tipos_licencas])
             licenca_dict = next(t for t in st.session_state.tipos_licencas if t["sigla"] == licenca_sel_sigla)
 
-            # Verifica o que já estava salvo para marcar os checkboxes
             docs_atuais = str(licenca_dict.get("documentos", ""))
             init_admin = "Administrativos" in docs_atuais
             init_tecnico = "Técnicos" in docs_atuais
@@ -321,6 +338,10 @@ elif menu_principal == "📜 Regras de Licenças & Docs":
                 
                 st.markdown("**Exigência de Documentos:**")
                 edit_admin = st.checkbox("Documentos Administrativos", value=init_admin)
+                
+                if edit_admin:
+                    st.info(f"**Documentos Administrativos necessários:**\n\n{LISTA_DOCS_ADM}")
+
                 edit_tecnico = st.checkbox("Documentos Técnicos", value=init_tecnico)
 
                 submitted_edit = st.form_submit_button("Atualizar Tipo de Licença")
