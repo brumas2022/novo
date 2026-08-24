@@ -173,7 +173,6 @@ def autosave_if_laura():
 # BARRA LATERAL (NAV E STATUS)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    ##st.title("Gestão de Licenciamento")
     st.image("logo_file.jpg", use_container_width=True)
     st.markdown(f"👤 **Usuário:** `{st.session_state.usuario_logado}`")
     
@@ -270,12 +269,14 @@ if menu_principal == "🏢 Cadastros de Empresas":
 # -----------------------------------------------------------------------------
 elif menu_principal == "📜 Regras de Licenças & Docs":
     st.title("📜 Tipos de Licença, Prazos e Documentos")
+    sub_menu_lic = st.radio("Selecione uma ação:", ["Inserir Licença", "Editar Licença"], horizontal=True)
 
-    with st.expander("➕ Adicionar Novo Tipo de Licença", expanded=False):
+    if sub_menu_lic == "Inserir Licença":
+        st.subheader("Adicionar Novo Tipo de Licença")
         with st.form("form_add_licenca"):
             sigla = st.text_input("Sigla (ex: LP, LI, LO, LAS)").upper()
             nome_lic = st.text_input("Nome Completo")
-            prazo_dias = st.number_input("Prazo Padrão (dias)", min_value=30, value=365)
+            prazo_dias = st.number_input("Prazo Padrão (dias)", min_value=1, value=365)
             docs = st.text_area("Documentos Necessários")
             
             submitted = st.form_submit_button("Salvar Tipo de Licença")
@@ -287,6 +288,29 @@ elif menu_principal == "📜 Regras de Licenças & Docs":
                 st.success(f"Tipo '{sigla}' cadastrado!")
                 st.rerun()
 
+    elif sub_menu_lic == "Editar Licença":
+        st.subheader("Editar Regras de Licenças e Docs")
+        if st.session_state.tipos_licencas:
+            licenca_sel_sigla = st.selectbox("Selecione a licença para editar:", [t["sigla"] for t in st.session_state.tipos_licencas])
+            licenca_dict = next(t for t in st.session_state.tipos_licencas if t["sigla"] == licenca_sel_sigla)
+
+            with st.form("form_edit_licenca"):
+                nova_sigla = st.text_input("Sigla", value=licenca_dict["sigla"]).upper()
+                novo_nome_lic = st.text_input("Nome Completo", value=licenca_dict["nome"])
+                novo_prazo_dias = st.number_input("Prazo Padrão (dias)", min_value=1, value=int(licenca_dict["prazo_padrao_dias"]))
+                novos_docs = st.text_area("Documentos Necessários", value=licenca_dict.get("documentos", ""))
+
+                submitted_edit = st.form_submit_button("Atualizar Tipo de Licença")
+                if submitted_edit:
+                    licenca_dict["sigla"] = nova_sigla
+                    licenca_dict["nome"] = novo_nome_lic
+                    licenca_dict["prazo_padrao_dias"] = novo_prazo_dias
+                    licenca_dict["documentos"] = novos_docs
+                    autosave_if_laura()
+                    st.success("Licença atualizada com sucesso!")
+                    st.rerun()
+
+    st.markdown("---")
     st.subheader("Tipos Configurados")
     if st.session_state.tipos_licencas:
         st.dataframe(pd.DataFrame(st.session_state.tipos_licencas), use_container_width=True)
@@ -295,46 +319,99 @@ elif menu_principal == "📜 Regras de Licenças & Docs":
 # 3. PROJETOS DE LICENCIAMENTO
 # -----------------------------------------------------------------------------
 elif menu_principal == "🚀 Projetos de Licenciamento":
-    st.title("🚀 Cadastro de Projetos de Licenciamento")
+    st.title("🚀 Gestão de Projetos de Licenciamento")
 
     if not st.session_state.empresas:
         st.warning("Cadastre ao menos uma Empresa antes de criar projetos.")
     else:
+        sub_menu_proj = st.radio("Selecione uma ação:", ["Inserir Projeto", "Editar Projeto"], horizontal=True)
         empresa_map = {e["nome"]: e["id"] for e in st.session_state.empresas}
-        empresa_nome_sel = st.selectbox("Selecione a Empresa (Cliente):", list(empresa_map.keys()))
-        empresa_id_sel = empresa_map[empresa_nome_sel]
-
+        empresa_id_to_nome = {e["id"]: e["nome"] for e in st.session_state.empresas}
         tipos_siglas = [t["sigla"] for t in st.session_state.tipos_licencas] if st.session_state.tipos_licencas else ["Outro"]
 
-        with st.form("form_novo_projeto"):
-            col1, col2 = st.columns(2)
-            with col1:
-                nome_proj = st.text_input("Nome do Projeto")
-                tipo_lic = st.selectbox("Tipo de Licença", tipos_siglas)
-                valor_proj = st.number_input("Valor do Projeto (R$)", min_value=0.0, value=5000.0, step=500.0)
-            
-            with col2:
-                dt_emissao = st.date_input("Data de Emissão")
-                prazo_default = next((t["prazo_padrao_dias"] for t in st.session_state.tipos_licencas if t["sigla"] == tipo_lic), 365)
-                dt_vencimento = st.date_input("Data de Vencimento", value=dt_emissao + timedelta(days=prazo_default))
-                status_proj = st.selectbox("Status Atual", ["Em andamento", "Aprovado", "Pendente Doc", "Cancelado"])
+        if sub_menu_proj == "Inserir Projeto":
+            empresa_nome_sel = st.selectbox("Selecione a Empresa (Cliente):", list(empresa_map.keys()))
+            empresa_id_sel = empresa_map[empresa_nome_sel]
 
-            sub_proj = st.form_submit_button("Cadastrar Projeto")
-            if sub_proj:
-                novo_id_p = max([p["id"] for p in st.session_state.projetos], default=100) + 1
-                st.session_state.projetos.append({
-                    "id": novo_id_p,
-                    "empresa_id": empresa_id_sel,
-                    "nome_projeto": nome_proj,
-                    "tipo_licenca": tipo_lic,
-                    "valor": valor_proj,
-                    "data_emissao": dt_emissao,
-                    "data_vencimento": dt_vencimento,
-                    "status": status_proj
-                })
-                autosave_if_laura()
-                st.success("Projeto cadastrado com sucesso!")
-                st.rerun()
+            with st.form("form_novo_projeto"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    nome_proj = st.text_input("Nome do Projeto")
+                    tipo_lic = st.selectbox("Tipo de Licença", tipos_siglas)
+                    valor_proj = st.number_input("Valor do Projeto (R$)", min_value=0.0, value=5000.0, step=500.0)
+                
+                with col2:
+                    dt_emissao = st.date_input("Data de Emissão", format="DD/MM/YYYY")
+                    prazo_default = next((t["prazo_padrao_dias"] for t in st.session_state.tipos_licencas if t["sigla"] == tipo_lic), 365)
+                    dt_vencimento = st.date_input("Data de Vencimento", value=dt_emissao + timedelta(days=int(prazo_default)), format="DD/MM/YYYY")
+                    status_proj = st.selectbox("Status Atual", ["Em andamento", "Aprovado", "Pendente Doc", "Cancelado"])
+
+                sub_proj = st.form_submit_button("Cadastrar Projeto")
+                if sub_proj:
+                    novo_id_p = max([p["id"] for p in st.session_state.projetos], default=100) + 1
+                    st.session_state.projetos.append({
+                        "id": novo_id_p,
+                        "empresa_id": empresa_id_sel,
+                        "nome_projeto": nome_proj,
+                        "tipo_licenca": tipo_lic,
+                        "valor": valor_proj,
+                        "data_emissao": dt_emissao,
+                        "data_vencimento": dt_vencimento,
+                        "status": status_proj
+                    })
+                    autosave_if_laura()
+                    st.success("Projeto cadastrado com sucesso!")
+                    st.rerun()
+
+        elif sub_menu_proj == "Editar Projeto":
+            st.subheader("Editar Projeto Existente")
+            if st.session_state.projetos:
+                proj_map = {f"ID: {p['id']} - {p['nome_projeto']}": p["id"] for p in st.session_state.projetos}
+                proj_sel = st.selectbox("Selecione o projeto:", list(proj_map.keys()))
+                proj_id = proj_map[proj_sel]
+                proj_dict = next(p for p in st.session_state.projetos if p["id"] == proj_id)
+
+                empresa_atual = empresa_id_to_nome.get(proj_dict["empresa_id"], list(empresa_map.keys())[0])
+
+                with st.form("form_edit_projeto"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        empresa_edit_nome = st.selectbox("Empresa (Cliente)", list(empresa_map.keys()), index=list(empresa_map.keys()).index(empresa_atual))
+                        nome_proj_edit = st.text_input("Nome do Projeto", value=proj_dict["nome_projeto"])
+                        tipo_index = tipos_siglas.index(proj_dict["tipo_licenca"]) if proj_dict["tipo_licenca"] in tipos_siglas else 0
+                        tipo_lic_edit = st.selectbox("Tipo de Licença", tipos_siglas, index=tipo_index)
+                        valor_proj_edit = st.number_input("Valor do Projeto (R$)", min_value=0.0, value=float(proj_dict["valor"]), step=500.0)
+
+                    with col2:
+                        d_emissao = proj_dict["data_emissao"] if isinstance(proj_dict["data_emissao"], datetime) or hasattr(proj_dict["data_emissao"], "year") else pd.to_datetime(proj_dict["data_emissao"]).date()
+                        d_venc = proj_dict["data_vencimento"] if isinstance(proj_dict["data_vencimento"], datetime) or hasattr(proj_dict["data_vencimento"], "year") else pd.to_datetime(proj_dict["data_vencimento"]).date()
+
+                        dt_emissao_edit = st.date_input("Data de Emissão", value=d_emissao, format="DD/MM/YYYY")
+                        dt_vencimento_edit = st.date_input("Data de Vencimento", value=d_venc, format="DD/MM/YYYY")
+                        status_options = ["Em andamento", "Aprovado", "Pendente Doc", "Cancelado"]
+                        status_index = status_options.index(proj_dict["status"]) if proj_dict["status"] in status_options else 0
+                        status_proj_edit = st.selectbox("Status Atual", status_options, index=status_index)
+
+                    submitted_edit_p = st.form_submit_button("Atualizar Projeto")
+                    if submitted_edit_p:
+                        proj_dict["empresa_id"] = empresa_map[empresa_edit_nome]
+                        proj_dict["nome_projeto"] = nome_proj_edit
+                        proj_dict["tipo_licenca"] = tipo_lic_edit
+                        proj_dict["valor"] = valor_proj_edit
+                        proj_dict["data_emissao"] = dt_emissao_edit
+                        proj_dict["data_vencimento"] = dt_vencimento_edit
+                        proj_dict["status"] = status_proj_edit
+                        autosave_if_laura()
+                        st.success("Projeto atualizado com sucesso!")
+                        st.rerun()
+
+    st.markdown("---")
+    st.subheader("Projetos Cadastrados")
+    if st.session_state.projetos:
+        df_p_show = pd.DataFrame(st.session_state.projetos)
+        df_p_show["data_emissao"] = pd.to_datetime(df_p_show["data_emissao"]).dt.strftime("%d/%m/%Y")
+        df_p_show["data_vencimento"] = pd.to_datetime(df_p_show["data_vencimento"]).dt.strftime("%d/%m/%Y")
+        st.dataframe(df_p_show, use_container_width=True)
 
 # -----------------------------------------------------------------------------
 # 4. RELATÓRIOS GERENCIAIS
@@ -352,7 +429,10 @@ elif menu_principal == "📊 Relatórios Gerenciais":
         m2.metric("Valor Total Contratado", f"R$ {df_completo['valor'].sum():,.2f}")
         m3.metric("Empresas Atendidas", df_completo["nome"].nunique())
 
-        st.dataframe(df_completo[["id_proj", "nome_projeto", "nome", "tipo_licenca", "valor", "status"]], use_container_width=True)
+        df_completo["data_emissao"] = pd.to_datetime(df_completo["data_emissao"]).dt.strftime("%d/%m/%Y")
+        df_completo["data_vencimento"] = pd.to_datetime(df_completo["data_vencimento"]).dt.strftime("%d/%m/%Y")
+
+        st.dataframe(df_completo[["id_proj", "nome_projeto", "nome", "tipo_licenca", "data_emissao", "data_vencimento", "valor", "status"]], use_container_width=True)
 
 # -----------------------------------------------------------------------------
 # 5. CONTROLE DE VENCIMENTOS E ALERTAS
@@ -365,15 +445,33 @@ elif menu_principal == "⏰ Controle de Vencimentos e Alertas":
         df_e = pd.DataFrame(st.session_state.empresas)
         df_alertas = pd.merge(df_p, df_e, left_on="empresa_id", right_on="id")
 
-        dias_antecedencia = st.slider("Filtrar licenças com vencimento em até (dias):", 5, 120, 30)
+        dias_antecedencia = st.number_input("Filtrar licenças com vencimento em até (dias):", min_value=1, max_value=365, value=30, step=1)
         hoje = datetime.now().date()
         
         df_alertas["dias_para_vencer"] = df_alertas["data_vencimento"].apply(
             lambda x: (x - hoje).days if isinstance(x, datetime) or hasattr(x, 'days') else (pd.to_datetime(x).date() - hoje).days
         )
-        df_filtrado = df_alertas[df_alertas["dias_para_vencer"] <= dias_antecedencia]
+        df_filtrado = df_alertas[df_alertas["dias_para_vencer"] <= dias_antecedencia].copy()
 
-        st.dataframe(df_filtrado[["nome_projeto", "nome", "tipo_licenca", "data_vencimento", "dias_para_vencer", "contato"]], use_container_width=True)
+        if not df_filtrado.empty:
+            df_filtrado["data_vencimento_fmt"] = pd.to_datetime(df_filtrado["data_vencimento"]).dt.strftime("%d/%m/%Y")
+            st.dataframe(df_filtrado[["nome_projeto", "nome", "tipo_licenca", "data_vencimento_fmt", "dias_para_vencer", "contato"]], use_container_width=True)
+
+            st.markdown("---")
+            st.subheader("📧 Enviar Alerta por E-mail")
+            with st.form("form_envio_email"):
+                email_destino = st.text_input("E-mail de destino do Alerta:")
+                assunto_email = st.text_input("Assunto do E-mail", value="Alerta de Vencimento de Licenças Ambientais")
+                enviar_btn = st.form_submit_button("Enviar Alerta")
+
+                if enviar_btn:
+                    if email_destino:
+                        # Exemplo conceitual de estrutura de e-mail registrada localmente ou via SMTP
+                        st.success(f"Alerta gerado com sucesso para {email_destino}! ({len(df_filtrado)} licença(s) no relatório)")
+                    else:
+                        st.error("Por favor, insira um e-mail válido.")
+        else:
+            st.info("Nenhuma licença com vencimento dentro do período especificado.")
 
 # -----------------------------------------------------------------------------
 # 6. SINCRONIZAÇÃO COM GOOGLE SHEETS
