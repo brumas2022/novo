@@ -277,12 +277,27 @@ elif menu_principal == "📜 Regras de Licenças & Docs":
             sigla = st.text_input("Sigla (ex: LP, LI, LO, LAS)").upper()
             nome_lic = st.text_input("Nome Completo")
             prazo_dias = st.number_input("Prazo Padrão (dias)", min_value=1, value=365)
-            docs = st.text_area("Documentos Necessários")
+            
+            st.markdown("**Exigência de Documentos:**")
+            doc_admin = st.checkbox("Documentos Administrativos")
+            doc_tecnico = st.checkbox("Documentos Técnicos")
             
             submitted = st.form_submit_button("Salvar Tipo de Licença")
             if submitted and sigla and nome_lic:
+                # Monta a lista de tipos de documentos selecionados
+                docs_selecionados = []
+                if doc_admin:
+                    docs_selecionados.append("Administrativos")
+                if doc_tecnico:
+                    docs_selecionados.append("Técnicos")
+                
+                docs_str = ", ".join(docs_selecionados) if docs_selecionados else "Nenhum"
+
                 st.session_state.tipos_licencas.append({
-                    "sigla": sigla, "nome": nome_lic, "prazo_padrao_dias": prazo_dias, "documentos": docs
+                    "sigla": sigla, 
+                    "nome": nome_lic, 
+                    "prazo_padrao_dias": prazo_dias, 
+                    "documentos": docs_str
                 })
                 autosave_if_laura()
                 st.success(f"Tipo '{sigla}' cadastrado!")
@@ -294,18 +309,33 @@ elif menu_principal == "📜 Regras de Licenças & Docs":
             licenca_sel_sigla = st.selectbox("Selecione a licença para editar:", [t["sigla"] for t in st.session_state.tipos_licencas])
             licenca_dict = next(t for t in st.session_state.tipos_licencas if t["sigla"] == licenca_sel_sigla)
 
+            # Verifica o que já estava salvo para marcar os checkboxes
+            docs_atuais = str(licenca_dict.get("documentos", ""))
+            init_admin = "Administrativos" in docs_atuais
+            init_tecnico = "Técnicos" in docs_atuais
+
             with st.form("form_edit_licenca"):
                 nova_sigla = st.text_input("Sigla", value=licenca_dict["sigla"]).upper()
                 novo_nome_lic = st.text_input("Nome Completo", value=licenca_dict["nome"])
                 novo_prazo_dias = st.number_input("Prazo Padrão (dias)", min_value=1, value=int(licenca_dict["prazo_padrao_dias"]))
-                novos_docs = st.text_area("Documentos Necessários", value=licenca_dict.get("documentos", ""))
+                
+                st.markdown("**Exigência de Documentos:**")
+                edit_admin = st.checkbox("Documentos Administrativos", value=init_admin)
+                edit_tecnico = st.checkbox("Documentos Técnicos", value=init_tecnico)
 
                 submitted_edit = st.form_submit_button("Atualizar Tipo de Licença")
                 if submitted_edit:
+                    docs_editados = []
+                    if edit_admin:
+                        docs_editados.append("Administrativos")
+                    if edit_tecnico:
+                        docs_editados.append("Técnicos")
+                    
                     licenca_dict["sigla"] = nova_sigla
                     licenca_dict["nome"] = novo_nome_lic
                     licenca_dict["prazo_padrao_dias"] = novo_prazo_dias
-                    licenca_dict["documentos"] = novos_docs
+                    licenca_dict["documentos"] = ", ".join(docs_editados) if docs_editados else "Nenhum"
+                    
                     autosave_if_laura()
                     st.success("Licença atualizada com sucesso!")
                     st.rerun()
