@@ -61,7 +61,19 @@ custom_css = """
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
-
+# -----------------------------------------------------------------------------
+# Estilização CSS Customizada (Fundo Verde Claro)
+# -----------------------------------------------------------------------------
+st.markdown(
+    """
+    <style>
+    .stApp {
+        background-color: #E8F5E9; /* Tom de verde claro bem suave */
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 # -----------------------------------------------------------------------------
 # INTEGRAÇÃO COM GOOGLE SHEETS
 # -----------------------------------------------------------------------------
