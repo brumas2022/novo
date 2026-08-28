@@ -8,7 +8,7 @@ import os
 # 1. CONFIGURAÇÃO DA PÁGINA E ESTILO CSS (SISTEMA SIGA/MT - TOM VERDE CLARO)
 # ==============================================================================
 st.set_page_config(
-    page_title="SIGA-MT | Gestão de Projetos e Licenciamento",
+    page_title="Gestão de Projetos e Licenciamento",
     page_icon="🌿",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -496,7 +496,7 @@ modulo = st.sidebar.radio(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.info("💡 **Estado de Mato Grosso**\n\nGoverno do Estado de Mato Grosso\nGestão de Licenciamento Ambiental")
+
 
 
 # ==============================================================================
