@@ -479,7 +479,7 @@ def delete_projeto(projeto_id):
 # ==============================================================================
 # 5. ESTRUTURA DO MENU SIDEBAR E NAVEGAÇÃO
 # ==============================================================================
-st.image("logo_file.jpg", use_container_width=True)
+st.sidebar.image("logo_file.jpg", use_container_width=True)
 #st.sidebar.title("SIGA-MT | PROTEGE")
 st.sidebar.caption("Sistema de Gestão de Projetos e Licenciamento Ambiental")
 st.sidebar.markdown("---")
