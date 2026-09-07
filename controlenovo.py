@@ -479,8 +479,8 @@ def delete_projeto(projeto_id):
 # ==============================================================================
 # 5. ESTRUTURA DO MENU SIDEBAR E NAVEGAÇÃO
 # ==============================================================================
-st.sidebar.image("https://img.icons8.com/color/96/000000/tree-structure.png", width=70)
-st.sidebar.title("SIGA-MT | PROTEGE")
+st.image("logo_file.jpg", use_container_width=True)
+#st.sidebar.title("SIGA-MT | PROTEGE")
 st.sidebar.caption("Sistema de Gestão de Projetos e Licenciamento Ambiental")
 st.sidebar.markdown("---")
 
@@ -505,7 +505,7 @@ st.sidebar.markdown("---")
 if modulo == "📊 Dashboard Geral":
     st.markdown("""
         <div class="siga-header">
-            <h1>🌿 SIGA-MT — Painel Geral de Projetos e Licenciamento</h1>
+            <h1>🌿 Painel Geral de Projetos e Licenciamento</h1>
             <p>Visão consolidada do controle de andamento, licenças ambientais e financeiros dos empreendimentos.</p>
         </div>
     """, unsafe_allow_html=True)
