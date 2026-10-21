@@ -480,7 +480,6 @@ def delete_projeto(projeto_id):
 # 5. ESTRUTURA DO MENU SIDEBAR E NAVEGAÇÃO
 # ==============================================================================
 st.sidebar.image("logo_file.jpg", use_container_width=True)
-#st.sidebar.title("SIGA-MT | PROTEGE")
 st.sidebar.caption("Sistema de Gestão de Projetos e Licenciamento Ambiental")
 st.sidebar.markdown("---")
 
@@ -498,7 +497,6 @@ modulo = st.sidebar.radio(
 st.sidebar.markdown("---")
 
 
-
 # ==============================================================================
 # MÓDULO 1: DASHBOARD GERAL
 # ==============================================================================
@@ -513,7 +511,6 @@ if modulo == "📊 Dashboard Geral":
     df_p = list_projetos()
     df_e = list_empresas()
     
-    # Métricas Principais em Cards Estilizados
     tot_proj = len(df_p)
     tot_emp = len(df_e)
     val_total = df_p['valor_projeto'].sum()
@@ -749,11 +746,14 @@ elif modulo == "📁 Módulo Projetos":
             else:
                 df_p_view = df_p_view[df_p_view['prazo_licenca'].str.contains(filtro_lic, case=False, na=False)]
                 
-        # Exibição Formatada de Valores
+        # Exibição Formatada de Valores e Datas
         if not df_p_view.empty:
             df_display = df_p_view.copy()
             df_display['Valor Projeto (R$)'] = df_display['valor_projeto'].apply(lambda x: f"R$ {x:,.2f}")
             df_display['Saldo (R$)'] = df_display['valor_saldo'].apply(lambda x: f"R$ {x:,.2f}")
+            
+            # Converte a coluna para o tipo datetime do pandas para a correta exibição na tabela
+            df_display['vencimento_licenca'] = pd.to_datetime(df_display['vencimento_licenca'], errors='coerce')
             
             st.dataframe(
                 df_display[[
@@ -762,7 +762,13 @@ elif modulo == "📁 Módulo Projetos":
                     'Valor Projeto (R$)', 'Saldo (R$)', 'status_pagamento'
                 ]],
                 use_container_width=True,
-                hide_index=True
+                hide_index=True,
+                column_config={
+                    "vencimento_licenca": st.column_config.DatetimeColumn(
+                        "Vencimento Licença",
+                        format="DD/MM/YYYY"
+                    )
+                }
             )
             
             st.markdown("#### 🔍 Detalhes Completos do Projeto Selecionado")
@@ -770,6 +776,11 @@ elif modulo == "📁 Módulo Projetos":
             
             if p_sel_id:
                 p_row = df_p_view[df_p_view['id'] == p_sel_id].iloc[0]
+                
+                # Formatação da data de vencimento no detalhamento
+                dt_venc_fmt = pd.to_datetime(p_row['vencimento_licenca'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(p_row['vencimento_licenca']) else 'N/I'
+                dt_emis_fmt = pd.to_datetime(p_row['data_emissao'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(p_row['data_emissao']) else 'N/I'
+
                 with st.expander("📄 Ver Ficha Técnica Completa do Projeto", expanded=True):
                     col_dt1, col_dt2, col_dt3 = st.columns(3)
                     with col_dt1:
@@ -779,8 +790,8 @@ elif modulo == "📁 Módulo Projetos":
                         st.write(f"**Município / UF:** {p_row['municipio']} / {p_row['uf']}")
                     with col_dt2:
                         st.write(f"**Licenças:** LP: [{p_row['lp'] or ' '}] | LI: [{p_row['li'] or ' '}] | LO: [{p_row['lo'] or ' '}]")
-                        st.write(f"**Data de Emissão:** {p_row['data_emissao'] or 'N/I'}")
-                        st.write(f"**Vencimento Licença:** {p_row['vencimento_licenca'] or 'N/I'}")
+                        st.write(f"**Data de Emissão:** {dt_emis_fmt}")
+                        st.write(f"**Vencimento Licença:** {dt_venc_fmt}")
                         st.write(f"**Status Licença:** {p_row['prazo_licenca']}")
                     with col_dt3:
                         st.markdown("**💰 Resumo Financeiro:**")
