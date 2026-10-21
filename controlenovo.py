@@ -97,24 +97,6 @@ st.markdown("""
         background-color: #2e7d32 !important;
         color: white !important;
     }
-
-    /* Badges de Status */
-    .badge-vencida {
-        background-color: #ffebee;
-        color: #c62828;
-        padding: 4px 10px;
-        border-radius: 12px;
-        font-weight: bold;
-        font-size: 0.8rem;
-    }
-    .badge-valida {
-        background-color: #e8f5e9;
-        color: #2e7d32;
-        padding: 4px 10px;
-        border-radius: 12px;
-        font-weight: bold;
-        font-size: 0.8rem;
-    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -227,9 +209,8 @@ def cargar_dados_iniciais_excel(conn):
             dt_venc_rel = pd.to_datetime(row['VENCIMENTO RELATÓRIO'], errors='coerce')
             dt_venc_rel_str = dt_venc_rel.strftime('%Y-%m-%d') if pd.notna(dt_venc_rel) else None
 
-            status_lic = str(row['PRAZO DA LICENÇA']) if pd.notna(row['PRAZO DA LICENÇA']) else 'Válida'
+            status_lic = str(row['PRAZO DA LICENÇA']) if pd.notna(row['PRAZO DA LICENÇA']) else 'Licença Válida'
 
-            # Valores financeiros padrão para demonstração inicial
             val_proj = 50000.00
             val_pago = 25000.00
             val_saldo = val_proj - val_pago
@@ -261,12 +242,11 @@ def cargar_dados_iniciais_excel(conn):
     except Exception as e:
         st.error(f"Erro ao carregar planilha inicial: {e}")
 
-# Executa inicialização
 init_db()
 
 
 # ==============================================================================
-# 3. LISTA DE MUNICÍPIOS DE MATO GROSSO (SISTEMA SIGA/MT)
+# 3. LISTA DE MUNICÍPIOS DE MATO GROSSO
 # ==============================================================================
 MUNICIPIOS_MT = [
     "Acorizal", "Água Boa", "Alta Floresta", "Alto Araguaia", "Alto Boa Vista", 
@@ -305,7 +285,6 @@ MUNICIPIOS_MT = [
 # 4. FUNÇÕES DE BANCO DE DADOS (CRUD EMPRESAS E PROJETOS)
 # ==============================================================================
 
-# --- EMPRESAS ---
 def list_empresas():
     conn = get_connection()
     df = pd.read_sql_query("SELECT * FROM empresas ORDER BY nome ASC", conn)
@@ -340,10 +319,7 @@ def update_empresa(empresa_id, nome, cnpj, telefone, email, responsavel, municip
             SET nome=?, cnpj=?, telefone=?, email=?, responsavel=?, municipio=?, uf=?, observacoes=?
             WHERE id=?
         ''', (nome, cnpj, telefone, email, responsavel, municipio, uf, observacoes, empresa_id))
-        
-        # Atualiza o nome do cliente na tabela de projetos
         cursor.execute("UPDATE projetos SET cliente_nome=? WHERE empresa_id=?", (nome, empresa_id))
-        
         conn.commit()
         conn.close()
         return True, "Dados da empresa atualizados com sucesso!"
@@ -388,6 +364,28 @@ def list_projetos(empresa_id=None, busca=None):
     query += " ORDER BY p.id DESC"
     df = pd.read_sql_query(query, conn, params=params)
     conn.close()
+    
+    # Cálculo dinâmico do Prazo da Licença (Dias e Status)
+    if not df.empty and 'vencimento_licenca' in df.columns:
+        hoje = pd.to_datetime(datetime.date.today())
+        
+        # Converte a data para datetime
+        dt_venc = pd.to_datetime(df['vencimento_licenca'], errors='coerce')
+        
+        # Calcula diferença em dias (vencimento - hoje)
+        df['dias_diferenca'] = (dt_venc - hoje).dt.days
+        
+        # Define se é Válida (> 0) ou Vencida (<= 0)
+        df['prazo_licenca'] = df['dias_diferenca'].apply(
+            lambda x: "Licença Válida" if pd.notna(x) and x > 0 else ("Licença Vencida" if pd.notna(x) else "Sem Data")
+        )
+        
+        # Formata texto da quantidade de dias
+        df['dias_status'] = df['dias_diferenca'].apply(
+            lambda x: f"{int(x)} dia(s) a vencer" if pd.notna(x) and x > 0 
+            else (f"{abs(int(x))} dia(s) vencida" if pd.notna(x) else "N/A")
+        )
+        
     return df
 
 def add_projeto(num_entrada, empresa_id, atividade, uf, municipio, num_processo, 
@@ -397,12 +395,10 @@ def add_projeto(num_entrada, empresa_id, atividade, uf, municipio, num_processo,
     cursor = conn.cursor()
     today_str = datetime.date.today().strftime('%Y-%m-%d')
     
-    # Busca nome do cliente
     cursor.execute("SELECT nome FROM empresas WHERE id=?", (empresa_id,))
     emp_res = cursor.fetchone()
     cliente_nome = emp_res[0] if emp_res else "Empresa Desconhecida"
     
-    # Cálculo automático do saldo
     valor_saldo = float(valor_projeto) + float(aditivos) - float(descontos) - float(valor_pago)
     
     try:
@@ -516,7 +512,7 @@ if modulo == "📊 Dashboard Geral":
     val_total = df_p['valor_projeto'].sum()
     val_pago = df_p['valor_pago'].sum()
     val_saldo = df_p['valor_saldo'].sum()
-    lic_vencidas = len(df_p[df_p['prazo_licenca'].str.contains("Vencida", case=False, na=False)])
+    lic_vencidas = len(df_p[df_p['prazo_licenca'] == "Licença Vencida"])
 
     col1, col2, col3, col4, col5 = st.columns(5)
     
@@ -577,14 +573,14 @@ if modulo == "📊 Dashboard Geral":
 
     st.markdown("### 📋 Visão Rápida dos Últimos Projetos Cadastrados")
     st.dataframe(
-        df_p[['id', 'cliente_nome', 'atividade', 'municipio', 'num_processo', 'prazo_licenca', 'valor_projeto', 'valor_saldo']].head(10),
+        df_p[['id', 'cliente_nome', 'atividade', 'municipio', 'num_processo', 'prazo_licenca', 'dias_status', 'valor_projeto', 'valor_saldo']].head(10),
         use_container_width=True,
         hide_index=True
     )
 
 
 # ==============================================================================
-# MÓDULO 2: GESTÃO DE EMPRESAS (CRUD COMPLETO)
+# MÓDULO 2: GESTÃO DE EMPRESAS
 # ==============================================================================
 elif modulo == "🏢 Módulo Empresas":
     st.markdown("""
@@ -601,7 +597,6 @@ elif modulo == "🏢 Módulo Empresas":
         "🗑️ Remover Empresa"
     ])
     
-    # --- 1. LISTAR EMPRESAS ---
     with tab_list_emp:
         st.markdown("### Lista de Empresas Cadastradas")
         busca_emp = st.text_input("🔍 Buscar por Nome, CNPJ ou Município:", key="busca_emp_input")
@@ -622,9 +617,8 @@ elif modulo == "🏢 Módulo Empresas":
             if emp_sel_id:
                 df_projs_emp = list_projetos(empresa_id=emp_sel_id)
                 st.write(f"**Projetos vinculados ({len(df_projs_emp)}):**")
-                st.dataframe(df_projs_emp[['id', 'num_processo', 'atividade', 'municipio', 'prazo_licenca', 'valor_projeto', 'valor_saldo']], use_container_width=True, hide_index=True)
+                st.dataframe(df_projs_emp[['id', 'num_processo', 'atividade', 'municipio', 'prazo_licenca', 'dias_status', 'valor_projeto', 'valor_saldo']], use_container_width=True, hide_index=True)
 
-    # --- 2. CADASTRAR EMPRESA ---
     with tab_add_emp:
         st.markdown("### ➕ Formulario de Cadastro de Nova Empresa")
         with st.form("form_add_empresa", clear_on_submit=True):
@@ -652,7 +646,6 @@ elif modulo == "🏢 Módulo Empresas":
                     else:
                         st.error(msg)
 
-    # --- 3. EDITAR EMPRESA ---
     with tab_edit_emp:
         st.markdown("### ✏️ Editar Dados da Empresa")
         df_e_all = list_empresas()
@@ -671,7 +664,6 @@ elif modulo == "🏢 Módulo Empresas":
                     email_ee = st.text_input("E-mail de Contato", value=row_e['email'] or "")
                 with col_ee2:
                     resp_ee = st.text_input("Responsável Técnico / Contato", value=row_e['responsavel'] or "")
-                    
                     mun_idx = MUNICIPIOS_MT.index(row_e['municipio']) if row_e['municipio'] in MUNICIPIOS_MT else 0
                     mun_ee = st.selectbox("Município Sede", MUNICIPIOS_MT, index=mun_idx)
                     uf_ee = st.text_input("UF", value=row_e['uf'] or "MT")
@@ -689,7 +681,6 @@ elif modulo == "🏢 Módulo Empresas":
                         else:
                             st.error(msg)
 
-    # --- 4. REMOVER EMPRESA ---
     with tab_del_emp:
         st.markdown("### 🗑️ Remover Empresa")
         df_e_del = list_empresas()
@@ -697,7 +688,6 @@ elif modulo == "🏢 Módulo Empresas":
             st.info("Nenhuma empresa disponível para remoção.")
         else:
             emp_del_id = st.selectbox("Selecione a Empresa a ser Removida:", df_e_del['id'].tolist(), format_func=lambda x: df_e_del[df_e_del['id']==x]['nome'].values[0])
-            
             df_linked = list_projetos(empresa_id=emp_del_id)
             st.warning(f"⚠️ **Atenção:** Esta ação excluirá a empresa e **{len(df_linked)} projeto(s)** vinculados a ela de forma permanente.")
             
@@ -711,7 +701,7 @@ elif modulo == "🏢 Módulo Empresas":
 
 
 # ==============================================================================
-# MÓDULO 3: GESTÃO DE PROJETOS (CRUD + INSERÇÃO DE VALORES FINANCEIROS)
+# MÓDULO 3: GESTÃO DE PROJETOS
 # ==============================================================================
 elif modulo == "📁 Módulo Projetos":
     st.markdown("""
@@ -735,7 +725,7 @@ elif modulo == "📁 Módulo Projetos":
         with c_f1:
             busca_proj = st.text_input("🔍 Buscar por Cliente, Processo ou Atividade:")
         with c_f2:
-            filtro_lic = st.selectbox("Filtrar por Licença:", ["Todos", "Licença Vencida", "Válida", "LP", "LI", "LO"])
+            filtro_lic = st.selectbox("Filtrar por Licença:", ["Todos", "Licença Vencida", "Licença Válida", "LP", "LI", "LO"])
             
         df_p_view = list_projetos(busca=busca_proj)
         
@@ -744,30 +734,37 @@ elif modulo == "📁 Módulo Projetos":
                 col_check = filtro_lic.lower()
                 df_p_view = df_p_view[df_p_view[col_check] == 'X']
             else:
-                df_p_view = df_p_view[df_p_view['prazo_licenca'].str.contains(filtro_lic, case=False, na=False)]
+                df_p_view = df_p_view[df_p_view['prazo_licenca'] == filtro_lic]
                 
         # Exibição Formatada de Valores e Datas
         if not df_p_view.empty:
             df_display = df_p_view.copy()
             df_display['Valor Projeto (R$)'] = df_display['valor_projeto'].apply(lambda x: f"R$ {x:,.2f}")
             df_display['Saldo (R$)'] = df_display['valor_saldo'].apply(lambda x: f"R$ {x:,.2f}")
-            
-            # Converte a coluna para o tipo datetime do pandas para a correta exibição na tabela
             df_display['vencimento_licenca'] = pd.to_datetime(df_display['vencimento_licenca'], errors='coerce')
+
+            # Função de Realce de Cores para o Streamlit
+            def aplicar_cor_licenca(val):
+                if val == "Licença Válida":
+                    return "background-color: #e8f5e9; color: #1b5e20; font-weight: bold;"
+                elif val == "Licença Vencida":
+                    return "background-color: #ffebee; color: #c62828; font-weight: bold;"
+                return ""
+
+            df_styled = df_display[[
+                'id', 'cliente_nome', 'atividade', 'municipio', 'num_processo', 
+                'lp', 'li', 'lo', 'vencimento_licenca', 'prazo_licenca', 'dias_status',
+                'Valor Projeto (R$)', 'Saldo (R$)', 'status_pagamento'
+            ]].style.map(aplicar_cor_licenca, subset=['prazo_licenca'])
             
             st.dataframe(
-                df_display[[
-                    'id', 'cliente_nome', 'atividade', 'municipio', 'num_processo', 
-                    'lp', 'li', 'lo', 'vencimento_licenca', 'prazo_licenca', 
-                    'Valor Projeto (R$)', 'Saldo (R$)', 'status_pagamento'
-                ]],
+                df_styled,
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "vencimento_licenca": st.column_config.DatetimeColumn(
-                        "Vencimento Licença",
-                        format="DD/MM/YYYY"
-                    )
+                    "vencimento_licenca": st.column_config.DatetimeColumn("Vencimento Licença", format="DD/MM/YYYY"),
+                    "prazo_licenca": st.column_config.TextColumn("Status Licença"),
+                    "dias_status": st.column_config.TextColumn("Dias Vencidos / a Vencer")
                 }
             )
             
@@ -776,8 +773,6 @@ elif modulo == "📁 Módulo Projetos":
             
             if p_sel_id:
                 p_row = df_p_view[df_p_view['id'] == p_sel_id].iloc[0]
-                
-                # Formatação da data de vencimento no detalhamento
                 dt_venc_fmt = pd.to_datetime(p_row['vencimento_licenca'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(p_row['vencimento_licenca']) else 'N/I'
                 dt_emis_fmt = pd.to_datetime(p_row['data_emissao'], errors='coerce').strftime('%d/%m/%Y') if pd.notna(p_row['data_emissao']) else 'N/I'
 
@@ -792,7 +787,13 @@ elif modulo == "📁 Módulo Projetos":
                         st.write(f"**Licenças:** LP: [{p_row['lp'] or ' '}] | LI: [{p_row['li'] or ' '}] | LO: [{p_row['lo'] or ' '}]")
                         st.write(f"**Data de Emissão:** {dt_emis_fmt}")
                         st.write(f"**Vencimento Licença:** {dt_venc_fmt}")
-                        st.write(f"**Status Licença:** {p_row['prazo_licenca']}")
+                        
+                        # Exibição com destaque na ficha técnica
+                        if p_row['prazo_licenca'] == "Licença Válida":
+                            st.markdown(f"**Status Licença:** <span style='color: #2e7d32; font-weight: bold;'>{p_row['prazo_licenca']} ({p_row['dias_status']})</span>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"**Status Licença:** <span style='color: #c62828; font-weight: bold;'>{p_row['prazo_licenca']} ({p_row['dias_status']})</span>", unsafe_allow_html=True)
+
                     with col_dt3:
                         st.markdown("**💰 Resumo Financeiro:**")
                         st.write(f"**Valor do Projeto:** R$ {p_row['valor_projeto']:,.2f}")
@@ -832,13 +833,11 @@ elif modulo == "📁 Módulo Projetos":
                 
                 st.markdown("---")
                 st.markdown("#### 2. Datas e Licenciamento Ambiental")
-                col_d1, col_d2, col_d3 = st.columns(3)
+                col_d1, col_d2 = st.columns(2)
                 with col_d1:
                     dt_emissao_p = st.date_input("Data de Emissão", value=datetime.date.today())
                 with col_d2:
                     dt_venc_p = st.date_input("Vencimento da Licença", value=datetime.date.today() + datetime.timedelta(days=365))
-                with col_d3:
-                    prazo_lic_p = st.selectbox("Status da Licença", ["Válida", "Licença Vencida", "Em Renovação", "Pendente"])
                 
                 coment_p = st.text_area("Comentários / Observações do Licenciamento", height=70)
 
@@ -865,7 +864,7 @@ elif modulo == "📁 Módulo Projetos":
                             num_ent, emp_id_sel, atividade_p.strip(), uf_p, mun_p, num_proc,
                             'X' if lp_check else '', 'X' if li_check else '', 'X' if lo_check else '',
                             dt_emissao_p.strftime('%Y-%m-%d'), dt_venc_p.strftime('%Y-%m-%d'), None,
-                            prazo_lic_p, None, coment_p,
+                            "Calculado Automaticamente", None, coment_p,
                             val_proj_p, val_pago_p, val_adit_p, val_desc_p, status_pag_p
                         )
                         if success:
@@ -909,7 +908,7 @@ elif modulo == "📁 Módulo Projetos":
 
                 st.markdown("---")
                 st.markdown("#### 2. Datas e Licenciamento")
-                col_de1, col_de2, col_de3 = st.columns(3)
+                col_de1, col_de2 = st.columns(2)
                 
                 dt_em_val = pd.to_datetime(p_row_e['data_emissao']).date() if pd.notna(p_row_e['data_emissao']) else datetime.date.today()
                 dt_vc_val = pd.to_datetime(p_row_e['vencimento_licenca']).date() if pd.notna(p_row_e['vencimento_licenca']) else datetime.date.today()
@@ -918,10 +917,6 @@ elif modulo == "📁 Módulo Projetos":
                     dt_emissao_pe = st.date_input("Data de Emissão", value=dt_em_val)
                 with col_de2:
                     dt_venc_pe = st.date_input("Vencimento da Licença", value=dt_vc_val)
-                with col_de3:
-                    prazo_opts = ["Válida", "Licença Vencida", "Em Renovação", "Pendente"]
-                    pr_idx = prazo_opts.index(p_row_e['prazo_licenca']) if p_row_e['prazo_licenca'] in prazo_opts else 0
-                    prazo_lic_pe = st.selectbox("Status da Licença", prazo_opts, index=pr_idx)
                 
                 coment_pe = st.text_area("Comentários", value=p_row_e['comentarios'] or "", height=70)
 
@@ -947,7 +942,7 @@ elif modulo == "📁 Módulo Projetos":
                         p_edit_id, num_ent_e, emp_id_e, atividade_pe.strip(), uf_pe, mun_pe, num_proc_e,
                         'X' if lp_check_e else '', 'X' if li_check_e else '', 'X' if lo_check_e else '',
                         dt_emissao_pe.strftime('%Y-%m-%d'), dt_venc_pe.strftime('%Y-%m-%d'), None,
-                        prazo_lic_pe, None, coment_pe,
+                        "Calculado Automaticamente", None, coment_pe,
                         val_proj_pe, val_pago_pe, val_adit_pe, val_desc_pe, status_pag_pe
                     )
                     if success:
@@ -956,7 +951,6 @@ elif modulo == "📁 Módulo Projetos":
                     else:
                         st.error(msg)
 
-    # --- 4. REMOVER PROJETO ---
     with tab_del_p:
         st.markdown("### 🗑️ Remover Projeto")
         df_projs_del = list_projetos()
