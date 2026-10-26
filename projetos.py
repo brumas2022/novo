@@ -1,15 +1,47 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, date
+import os
 
 # Configuração da página
 st.set_page_config(
-    page_title="Gestão de Projetos - Sanear",
-    page_icon="📊",
+    page_title="SANEAR - Gestão de Projetos",
+    page_icon="💧",
     layout="wide"
 )
 
+# Estilização CSS customizada com a paleta oficial SANEAR (Azul e Verde)
+st.markdown("""
+    <style>
+    /* Cor dos botões principais */
+    div.stButton > button:first-child {
+        background-color: #0082cb;
+        color: white;
+        border-radius: 8px;
+        border: none;
+        font-weight: bold;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #014f86;
+        color: white;
+    }
+    /* Estilo dos títulos e destaques */
+    .stApp h1 {
+        color: #014f86;
+    }
+    .stApp h2, .stApp h3 {
+        color: #2ba84a;
+    }
+    /* Borda da barra lateral */
+    section[data-testid="stSidebar"] {
+        background-color: #f4f9fc;
+        border-right: 2px solid #e0f2fe;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 EXCEL_FILE = "Projetos_sanear.xlsx"
+LOGO_FILE = "docx_extracted/word/media/image1.jpeg"  # Caminho da imagem/logo do SANEAR
 
 # Função para carregar e tratar os dados da planilha
 def carregar_dados():
@@ -27,7 +59,7 @@ def carregar_dados():
 def salvar_dados(df):
     try:
         df.to_excel(EXCEL_FILE, index=False)
-        st.success("Dados salvos com sucesso!")
+        st.success("💧 Dados salvos com sucesso!")
     except Exception as e:
         st.error(f"Erro ao salvar alterações no arquivo: {e}")
 
@@ -56,7 +88,7 @@ def calcular_status(df):
     df['DIAS DE ATRASO'] = dias_atraso_list
     return df
 
-# Função para formatar datas no padrão brasileiro DD/MM/AAAA na exibição
+# Formatação de data DD/MM/AAAA
 def formatar_datas_para_exibicao(df):
     df_exibicao = df.copy()
     colunas_data = ['INICIO', 'PRAZO FINAL', 'DATA CONCLUSAO']
@@ -67,12 +99,14 @@ def formatar_datas_para_exibicao(df):
             )
     return df_exibicao
 
-# Função para aplicar estilo de cor vermelho/verde na coluna de STATUS
+# Estilo visual de cores do SANEAR para as tabelas
 def estilar_status(val):
     if val == 'Em Atraso':
-        return 'background-color: #ffcdd2; color: #b71c1c; font-weight: bold;'
-    elif val in ['Em Andamento', 'Concluído']:
-        return 'background-color: #c8e6c9; color: #1b5e20; font-weight: bold;'
+        return 'background-color: #ffebee; color: #c62828; font-weight: bold;'
+    elif val == 'Concluído':
+        return 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold;'
+    elif val == 'Em Andamento':
+        return 'background-color: #e3f2fd; color: #1565c0; font-weight: bold;'
     return ''
 
 # --- MÓDULO DE AUTENTICAÇÃO ---
@@ -81,11 +115,11 @@ def autenticacao():
         st.session_state["autenticado"] = False
 
     if not st.session_state["autenticado"]:
-        st.sidebar.title("🔑 Acesso ao Sistema")
-        senha_correta = "sanear123"  # Defina a senha desejada
-        senha_digitada = st.sidebar.text_input("Digite a senha de acesso:", type="password")
+        st.sidebar.title("🛡️ Acesso Restrito")
+        senha_correta = "sanear123"
+        senha_digitada = st.sidebar.text_input("🔑 Digite a senha de acesso:", type="password")
 
-        if st.sidebar.button("Entrar"):
+        if st.sidebar.button("🔓 Entrar no Sistema"):
             if senha_digitada == senha_correta:
                 st.session_state["autenticado"] = True
                 st.sidebar.success("Acesso liberado!")
@@ -97,10 +131,19 @@ def autenticacao():
 
 # --- APLICAÇÃO PRINCIPAL ---
 if autenticacao():
-    st.sidebar.title("📌 Navegação")
-    opcao = st.sidebar.radio("Selecione um módulo:", ["Dashboard de Apresentação", "Módulo de Relatórios", "Inserção e Edição de Dados"])
+    # Exibir Logotipo na Barra Lateral se existir
+    if os.path.exists(LOGO_FILE):
+        st.sidebar.image(LOGO_FILE, use_container_width=True)
+    else:
+        st.sidebar.markdown("## 💧 **SANEAR**")
+
+    st.sidebar.title("🌊 Navegação")
+    opcao = st.sidebar.radio(
+        "Selecione um módulo:",
+        ["📊 Dashboard & Prazos", "📋 Relatórios Ambientais", "🛠️ Inserção e Gestão"]
+    )
     
-    if st.sidebar.button("Sair / Logout"):
+    if st.sidebar.button("🔒 Sair / Logout"):
         st.session_state["autenticado"] = False
         st.rerun()
 
@@ -108,21 +151,21 @@ if autenticacao():
     df_calculado = calcular_status(df_bruto)
 
     # 1. DASHBOARD DE APRESENTAÇÃO
-    if opcao == "Dashboard de Apresentação":
-        st.title("📊 Painel de Acompanhamento de Projetos - Sanear")
+    if opcao == "📊 Dashboard & Prazos":
+        st.title("💧 Painel de Gestão de Projetos - SANEAR")
         
-        # Indicadores chave
+        # Indicadores Chave
         col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Total de Projetos", len(df_calculado))
-        col2.metric("Em Andamento", len(df_calculado[df_calculado['STATUS'] == "Em Andamento"]))
-        col3.metric("Concluídos", len(df_calculado[df_calculado['STATUS'] == "Concluído"]))
-        col4.metric("Em Atraso", len(df_calculado[df_calculado['STATUS'] == "Em Atraso"]))
+        col1.metric("📁 Total de Projetos", len(df_calculado))
+        col2.metric("⏳ Em Andamento", len(df_calculado[df_calculado['STATUS'] == "Em Andamento"]))
+        col3.metric("✅ Concluídos", len(df_calculado[df_calculado['STATUS'] == "Concluído"]))
+        col4.metric("🚨 Em Atraso", len(df_calculado[df_calculado['STATUS'] == "Em Atraso"]))
 
         st.markdown("---")
 
-        # Projetos em Atraso
+        # Seção de Alerta de Projetos em Atraso
         df_atrasados = df_calculado[df_calculado['STATUS'] == "Em Atraso"].sort_values(by="DIAS DE ATRASO", ascending=False)
-        st.subheader("⚠️ Projetos com Prazo Excedido (Em Atraso)")
+        st.subheader("🚨 Projetos Com Prazos Vencidos")
         
         if not df_atrasados.empty:
             df_atrasados_fmt = formatar_datas_para_exibicao(df_atrasados)
@@ -131,12 +174,12 @@ if autenticacao():
                 use_container_width=True
             )
         else:
-            st.success("Nenhum projeto em atraso no momento!")
+            st.success("🌿 Excelente! Nenhum projeto em atraso no momento.")
 
         st.markdown("---")
 
-        # Tabela Geral com prazos e status colorido
-        st.subheader("📋 Visão Geral dos Prazos de Conclusão")
+        # Tabela Geral
+        st.subheader("📋 Acompanhamento de Prazos e Conclusão")
         df_geral_fmt = formatar_datas_para_exibicao(df_calculado)
         cols_ordem = ["PROJETO", "Material/Serviço", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO", "STATUS", "DIAS DE ATRASO"]
         
@@ -146,19 +189,19 @@ if autenticacao():
         )
 
     # 2. MÓDULO DE RELATÓRIOS
-    elif opcao == "Módulo de Relatórios":
-        st.title("📈 Relatório de Projetos")
+    elif opcao == "📋 Relatórios Ambientais":
+        st.title("📋 Relatório Geral de Projetos e Serviços")
 
-        st.subheader("Filtros de Pesquisa")
+        st.subheader("🔍 Filtros de Consulta")
         col_f1, col_f2 = st.columns(2)
 
         responsaveis = ["Todos"] + list(df_calculado['RESPONSAVEL'].dropna().unique())
-        resp_sel = col_f1.selectbox("Filtrar por Responsável:", responsaveis)
+        resp_sel = col_f1.selectbox("👤 Responsável:", responsaveis)
 
         status_opcoes = ["Todos", "Em Atraso", "Em Andamento", "Concluído"]
-        status_sel = col_f2.selectbox("Filtrar por Status:", status_opcoes)
+        status_sel = col_f2.selectbox("📌 Status do Projeto:", status_opcoes)
 
-        # Aplicação dos filtros
+        # Filtros
         df_filtrado = df_calculado.copy()
         if resp_sel != "Todos":
             df_filtrado = df_filtrado[df_filtrado['RESPONSAVEL'] == resp_sel]
@@ -166,7 +209,7 @@ if autenticacao():
             df_filtrado = df_filtrado[df_filtrado['STATUS'] == status_sel]
 
         st.markdown("---")
-        st.write(f"**Registros Encontrados:** {len(df_filtrado)}")
+        st.write(f"**Registros Localizados:** {len(df_filtrado)}")
         
         df_filtrado_fmt = formatar_datas_para_exibicao(df_filtrado)
         st.dataframe(
@@ -174,32 +217,32 @@ if autenticacao():
             use_container_width=True
         )
 
-        # Download do relatório
+        # Download do relatório em CSV
         csv = df_filtrado_fmt.to_csv(index=False).encode('utf-8')
         st.download_button(
-            label="📥 Baixar Relatório em CSV",
+            label="📥 Exportar Relatório em CSV",
             data=csv,
             file_name="relatorio_projetos_sanear.csv",
             mime="text/csv"
         )
 
     # 3. INSERÇÃO E EDIÇÃO DE DADOS
-    elif opcao == "Inserção e Edição de Dados":
-        st.title("📝 Cadastro e Atualização de Projetos")
+    elif opcao == "🛠️ Inserção e Gestão":
+        st.title("🛠️ Cadastrar e Atualizar Projetos")
 
-        aba_novo, aba_editar = st.tabs(["➕ Inserir Novo Projeto", "✏️ Atualizar Conclusão / Projeto"])
+        aba_novo, aba_editar = st.tabs(["➕ Novo Projeto / Serviço", "✏️ Atualizar Status / Conclusão"])
 
-        # Formulário para novo projeto
+        # Cadastro de novos projetos
         with aba_novo:
-            st.subheader("Cadastrar Novo Projeto")
+            st.subheader("Cadastrar Nova Demanda")
             with st.form("form_novo_projeto"):
-                novo_nome = st.text_input("Nome do Projeto")
-                novo_tipo = st.selectbox("Material / Serviço", ["Material", "Serviço", "Outro"])
-                novo_resp = st.text_input("Responsável")
-                novo_inicio = st.date_input("Data de Início", value=date.today(), format="DD/MM/YYYY")
-                novo_prazo = st.date_input("Prazo Final", value=date.today(), format="DD/MM/YYYY")
+                novo_nome = st.text_input("🏷️ Nome do Projeto / Obra")
+                novo_tipo = st.selectbox("📦 Material / Serviço", ["Material", "Serviço", "Outro"])
+                novo_resp = st.text_input("👤 Responsável Téquinico")
+                novo_inicio = st.date_input("📅 Data de Início", value=date.today(), format="DD/MM/YYYY")
+                novo_prazo = st.date_input("⏳ Prazo Final Previsto", value=date.today(), format="DD/MM/YYYY")
 
-                btn_cadastrar = st.form_submit_button("Salvar Novo Projeto")
+                btn_cadastrar = st.form_submit_button("💾 Salvar Projeto")
 
                 if btn_cadastrar:
                     if novo_nome and novo_resp:
@@ -216,21 +259,21 @@ if autenticacao():
                         salvar_dados(df_atualizado)
                         st.rerun()
                     else:
-                        st.warning("Preencha todos os campos obrigatórios (Nome do Projeto e Responsável).")
+                        st.warning("⚠️ Preencha os campos obrigatórios (Nome do Projeto e Responsável).")
 
-        # Formulário para atualizar projeto existente
+        # Atualização de Projetos
         with aba_editar:
-            st.subheader("Atualizar Data de Conclusão")
+            st.subheader("Registrar Conclusão de Projeto")
             if not df_bruto.empty:
-                projeto_sel = st.selectbox("Selecione o Projeto para Atualizar:", df_bruto['PROJETO'].unique())
+                projeto_sel = st.selectbox("Selecione o Projeto:", df_bruto['PROJETO'].unique())
                 idx = df_bruto[df_bruto['PROJETO'] == projeto_sel].index[0]
 
                 data_atual_conc = df_bruto.loc[idx, 'DATA CONCLUSAO']
                 val_inicial_conc = data_atual_conc if pd.notna(data_atual_conc) else date.today()
 
-                nova_conclusao = st.date_input("Data de Conclusão Efetiva:", value=val_inicial_conc, format="DD/MM/YYYY")
+                nova_conclusao = st.date_input("✅ Data de Conclusão Efetiva:", value=val_inicial_conc, format="DD/MM/YYYY")
 
-                if st.button("Marcar / Atualizar Conclusão"):
+                if st.button("💾 Registrar Conclusão"):
                     df_bruto.loc[idx, 'DATA CONCLUSAO'] = nova_conclusao
                     cols_salvar = ["PROJETO", "Material/Serviço", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO"]
                     salvar_dados(df_bruto[cols_salvar])
