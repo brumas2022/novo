@@ -238,7 +238,7 @@ if autenticacao():
             with st.form("form_novo_projeto"):
                 novo_nome = st.text_input("🏷️ Nome do Projeto / Obra")
                 novo_tipo = st.selectbox("📦 Material / Serviço", ["Material", "Serviço", "Outro"])
-                novo_resp = st.text_input("👤 Responsável Téquinico")
+                novo_resp = st.text_input("👤 Responsável Técnico")
                 novo_inicio = st.date_input("📅 Data de Início", value=date.today(), format="DD/MM/YYYY")
                 novo_prazo = st.date_input("⏳ Prazo Final Previsto", value=date.today(), format="DD/MM/YYYY")
 
