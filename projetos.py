@@ -226,4 +226,12 @@ if autenticacao():
                 idx = df_bruto[df_bruto['PROJETO'] == projeto_sel].index[0]
 
                 data_atual_conc = df_bruto.loc[idx, 'DATA CONCLUSAO']
-                val_inicial_conc = data_atual_conc if pd.notna(data_atual_
+                val_inicial_conc = data_atual_conc if pd.notna(data_atual_conc) else date.today()
+
+                nova_conclusao = st.date_input("Data de Conclusão Efetiva:", value=val_inicial_conc, format="DD/MM/YYYY")
+
+                if st.button("Marcar / Atualizar Conclusão"):
+                    df_bruto.loc[idx, 'DATA CONCLUSAO'] = nova_conclusao
+                    cols_salvar = ["PROJETO", "Material/Serviço", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO"]
+                    salvar_dados(df_bruto[cols_salvar])
+                    st.rerun()
