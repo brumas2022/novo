@@ -170,7 +170,7 @@ if autenticacao():
         if not df_atrasados.empty:
             df_atrasados_fmt = formatar_datas_para_exibicao(df_atrasados)
             st.dataframe(
-                df_atrasados_fmt[["PROJETO", "RESPONSAVEL", "PRAZO FINAL", "DIAS DE ATRASO", "STATUS"]].style.map(estilar_status, subset=['STATUS']),
+                df_atrasados_fmt[["PROJETO", "Material/Serviço", "RESPONSAVEL", "PRAZO FINAL", "DIAS DE ATRASO", "STATUS"]].style.map(estilar_status, subset=['STATUS']),
                 use_container_width=True
             )
         else:
