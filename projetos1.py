@@ -56,11 +56,14 @@ st.markdown("""
 
 LOGO_FILE = "docx_extracted/word/media/image1.jpeg"
 
-# Função para conectar e carregar os dados do Google Sheets usando st.connection
+# Inicializa conexão GSheets
+def obter_conexao():
+    return st.connection("gsheets", type=GSheetsConnection)
+
+# Função para conectar e carregar os dados do Google Sheets
 def carregar_dados_gsheets():
     try:
-        # Inicializa a conexão declarada em [connections.gsheets] no secrets.toml
-        conn = st.connection("gsheets", type=GSheetsConnection)
+        conn = obter_conexao()
         
         # Lê a aba NovoPac da planilha PROJETOS_SANEAR
         df_projetos = conn.read(worksheet="NovoPac", ttl="0")
@@ -72,14 +75,11 @@ def carregar_dados_gsheets():
         df_projetos.columns = df_projetos.columns.astype(str).str.strip()
         df_servidor.columns = df_servidor.columns.astype(str).str.strip()
 
-        # Garante que a coluna de associação/responsável exista
-        # Caso a aba Servidor tenha o mapeamento (ex: ID_PROJETO ou PROJETO para RESPONSAVEL)
+        # Garante que a coluna de responsável exista (cruza com aba Servidor se disponível)
         if "RESPONSAVEL" in df_servidor.columns and "RESPONSAVEL" not in df_projetos.columns:
-            # Tenta realizar o merge por PROJETO se existir em ambas, ou traz diretamente se houver correspondência
             if "PROJETO" in df_servidor.columns and "PROJETO" in df_projetos.columns:
                 df_projetos = df_projetos.merge(df_servidor[["PROJETO", "RESPONSAVEL"]], on="PROJETO", how="left")
             else:
-                # Caso a aba Servidor seja apenas uma lista de responsáveis associada pelo índice
                 df_projetos["RESPONSAVEL"] = df_servidor["RESPONSAVEL"]
         elif "RESPONSAVEL" not in df_projetos.columns:
             df_projetos["RESPONSAVEL"] = "Não Definido"
@@ -94,11 +94,29 @@ def carregar_dados_gsheets():
         for col_data in ['INICIO', 'PRAZO FINAL', 'DATA CONCLUSAO']:
             df_projetos[col_data] = pd.to_datetime(df_projetos[col_data], errors='coerce').dt.date
 
-        return df_projetos[cols_obrigatorias]
+        return df_projetos[cols_obrigatorias], df_servidor
 
     except Exception as e:
         st.error(f"⚠️ Erro ao conectar ao Google Sheets via secrets: {e}")
-        return pd.DataFrame(columns=["PROJETO", "TIPO", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO"])
+        cols = ["PROJETO", "TIPO", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO"]
+        return pd.DataFrame(columns=cols), pd.DataFrame()
+
+# Função para atualizar a aba NovoPac no Google Sheets
+def salvar_dados_gsheets(df):
+    try:
+        conn = obter_conexao()
+        df_salvar = df[["PROJETO", "TIPO", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO"]].copy()
+        
+        # Converte datas para string no formato AAAA-MM-DD para salvar corretamente no Sheets
+        for col in ['INICIO', 'PRAZO FINAL', 'DATA CONCLUSAO']:
+            df_salvar[col] = df_salvar[col].apply(lambda x: str(x) if pd.notna(x) and x != "" else "")
+            
+        conn.update(worksheet="NovoPac", data=df_salvar)
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"❌ Erro ao salvar dados no Google Sheets: {e}")
+        return False
 
 # Função para calcular o status e regras de vencimento
 def calcular_status(df):
@@ -111,11 +129,11 @@ def calcular_status(df):
         prazo = row['PRAZO FINAL']
         conclusao = row['DATA CONCLUSAO']
 
-        if pd.notna(conclusao):
+        if pd.notna(conclusao) and str(conclusao).strip() != "" and str(conclusao).strip() != "None":
             status_list.append("Concluído")
             dias_atraso_list.append(0)
             cor_linha_list.append("verde")
-        elif pd.notna(prazo):
+        elif pd.notna(prazo) and str(prazo).strip() != "" and str(prazo).strip() != "None":
             dias_para_vencer = (prazo - hoje).days
             if prazo < hoje:
                 atraso = (hoje - prazo).days
@@ -191,7 +209,11 @@ if autenticacao():
 
     opcao = st.sidebar.radio(
         "Selecione um módulo:",
-        ["📊 Dashboard & Prazos", "📋 Relatórios Ambientais"]
+        [
+            "📊 Dashboard & Prazos", 
+            "🛠️ Gestão de Projetos (Incluir / Editar / Remover)",
+            "📋 Relatórios Ambientais"
+        ]
     )
     
     if st.sidebar.button("🔒 Sair / Logout"):
@@ -199,10 +221,12 @@ if autenticacao():
         st.rerun()
 
     # Carrega os dados diretamente do Google Sheets
-    df_bruto = carregar_dados_gsheets()
-    df_calculado = calcular_status(df_bruto)
+    df_bruto, df_servidor = carregar_dados_gsheets()
+    df_calculado = calcular_status(df_bruto.copy())
 
+    # ---------------------------------------------------------
     # 1. DASHBOARD & PRAZOS
+    # ---------------------------------------------------------
     if opcao == "📊 Dashboard & Prazos":
         st.title("💧 Painel de Gestão de Projetos - SANEAR")
         
@@ -212,7 +236,7 @@ if autenticacao():
         prox_vencimento = len(df_calculado[df_calculado['COR_LINHA'] == "amarelo"])
         em_atraso = len(df_calculado[df_calculado['COR_LINHA'] == "vermelho"])
 
-        # Quadrados / Cards customizados com as cores solicitadas
+        # Quadrados / Cards customizados
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             st.markdown(f"""
@@ -225,7 +249,7 @@ if autenticacao():
         with c2:
             st.markdown(f"""
                 <div class="card-dashboard card-verde">
-                    <div class="card-title">✅ No Prazo / Concluído</div>
+                    <div class="card-title">✅ No Prazo / Concluídos</div>
                     <div class="card-num">{no_prazo}</div>
                 </div>
             """, unsafe_allow_html=True)
@@ -248,33 +272,138 @@ if autenticacao():
 
         st.markdown("---")
 
-        # Alerta de Projetos em Atraso
-        df_atrasados = df_calculado[df_calculado['COR_LINHA'] == "vermelho"].sort_values(by="DIAS DE ATRASO", ascending=False)
-        st.subheader("🚨 Projetos Com Prazos Vencidos (Linha Vermelha)")
-        
+        # Tabela Geral com Destaque por Cores na Linha Inteira
+        st.subheader("📋 Acompanhamento Geral de Todos os Projetos")
         cols_exibicao = ["PROJETO", "TIPO", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO", "STATUS", "DIAS DE ATRASO"]
         
-        if not df_atrasados.empty:
-            df_atrasados_fmt = formatar_datas_para_exibicao(df_atrasados)
+        if not df_calculado.empty:
+            df_geral_fmt = formatar_datas_para_exibicao(df_calculado)
             st.dataframe(
-                df_atrasados_fmt[cols_exibicao].style.apply(estilar_linha_inteira, axis=1),
+                df_geral_fmt[cols_exibicao].style.apply(estilar_linha_inteira, axis=1),
                 use_container_width=True
             )
         else:
-            st.success("🌿 Excelente! Nenhum projeto em atraso no momento.")
+            st.info("Nenhum projeto cadastrado no momento.")
 
-        st.markdown("---")
+    # ---------------------------------------------------------
+    # 2. MÓDULO DE INCLUSÃO, EDIÇÃO E REMOÇÃO (CRUD)
+    # ---------------------------------------------------------
+    elif opcao == "🛠️ Gestão de Projetos (Incluir / Editar / Remover)":
+        st.title("🛠️ Gestão e Manipulação de Projetos")
 
-        # Tabela Geral com coloração inteira por linha
-        st.subheader("📋 Acompanhamento Geral de Prazos")
-        df_geral_fmt = formatar_datas_para_exibicao(df_calculado)
-        
-        st.dataframe(
-            df_geral_fmt[cols_exibicao].style.apply(estilar_linha_inteira, axis=1),
-            use_container_width=True
-        )
+        aba_novo, aba_editar, aba_remover = st.tabs([
+            "➕ Incluir Novo Projeto", 
+            "✏️ Editar / Concluir Projeto", 
+            "🗑️ Remover Projeto"
+        ])
 
-    # 2. MÓDULO DE RELATÓRIOS
+        # Obter lista de responsáveis vindos da aba Servidor (se disponível)
+        lista_servidores = []
+        if not df_servidor.empty and "RESPONSAVEL" in df_servidor.columns:
+            lista_servidores = list(df_servidor["RESPONSAVEL"].dropna().unique())
+
+        # ABA 1: INCLUSÃO DE PROJETO
+        with aba_novo:
+            st.subheader("➕ Cadastrar Novo Projeto")
+            with st.form("form_novo_projeto", clear_on_submit=True):
+                novo_nome = st.text_input("🏷️ Nome do Projeto / Obra")
+                novo_tipo = st.selectbox("📦 Tipo", ["Material", "Serviço", "Obra", "Outro"])
+                
+                if lista_servidores:
+                    novo_resp = st.selectbox("👤 Responsável Técnico (Aba Servidor)", lista_servidores)
+                else:
+                    novo_resp = st.text_input("👤 Responsável Técnico")
+
+                col_dt1, col_dt2 = st.columns(2)
+                novo_inicio = col_dt1.date_input("📅 Data de Início", value=date.today(), format="DD/MM/YYYY")
+                novo_prazo = col_dt2.date_input("⏳ Prazo Final Previsto", value=date.today(), format="DD/MM/YYYY")
+
+                btn_cadastrar = st.form_submit_button("💾 Salvar Novo Projeto")
+
+                if btn_cadastrar:
+                    if novo_nome and novo_resp:
+                        novo_registro = pd.DataFrame([{
+                            "PROJETO": novo_nome,
+                            "TIPO": novo_tipo,
+                            "RESPONSAVEL": novo_resp,
+                            "INICIO": novo_inicio,
+                            "PRAZO FINAL": novo_prazo,
+                            "DATA CONCLUSAO": None
+                        }])
+                        df_atualizado = pd.concat([df_bruto, novo_registro], ignore_index=True)
+                        if salvar_dados_gsheets(df_atualizado):
+                            st.success(f"✅ Projeto '{novo_nome}' inserido com sucesso!")
+                            st.rerun()
+                    else:
+                        st.warning("⚠️ Preencha os campos obrigatórios (Nome do Projeto e Responsável).")
+
+        # ABA 2: EDIÇÃO DE PROJETO
+        with aba_editar:
+            st.subheader("✏️ Editar ou Registrar Conclusão")
+            if not df_bruto.empty:
+                projetos_disponiveis = df_bruto["PROJETO"].dropna().unique()
+                projeto_sel = st.selectbox("Selecione o Projeto para Editar:", projetos_disponiveis, key="select_editar")
+                
+                idx = df_bruto[df_bruto['PROJETO'] == projeto_sel].index[0]
+                row_atual = df_bruto.loc[idx]
+
+                with st.form("form_editar_projeto"):
+                    edit_nome = st.text_input("🏷️ Nome do Projeto", value=str(row_atual["PROJETO"]))
+                    edit_tipo = st.text_input("📦 Tipo", value=str(row_atual["TIPO"]) if pd.notna(row_atual["TIPO"]) else "Serviço")
+                    
+                    if lista_servidores:
+                        val_resp_idx = lista_servidores.index(row_atual["RESPONSAVEL"]) if row_atual["RESPONSAVEL"] in lista_servidores else 0
+                        edit_resp = st.selectbox("👤 Responsável", lista_servidores, index=val_resp_idx)
+                    else:
+                        edit_resp = st.text_input("👤 Responsável", value=str(row_atual["RESPONSAVEL"]))
+
+                    col_ed1, col_ed2, col_ed3 = st.columns(3)
+                    
+                    dt_inc = row_atual["INICIO"] if pd.notna(row_atual["INICIO"]) else date.today()
+                    dt_prz = row_atual["PRAZO FINAL"] if pd.notna(row_atual["PRAZO FINAL"]) else date.today()
+                    
+                    edit_inicio = col_ed1.date_input("📅 Data Início", value=dt_inc, format="DD/MM/YYYY")
+                    edit_prazo = col_ed2.date_input("⏳ Prazo Final", value=dt_prz, format="DD/MM/YYYY")
+                    
+                    # Permite marcar ou limpar data de conclusão
+                    tem_conclusao = st.checkbox("Marcar como Concluído?", value=pd.notna(row_atual["DATA CONCLUSAO"]))
+                    dt_conc = row_atual["DATA CONCLUSAO"] if pd.notna(row_atual["DATA CONCLUSAO"]) else date.today()
+                    edit_conclusao = col_ed3.date_input("✅ Data Conclusão", value=dt_conc, format="DD/MM/YYYY", disabled=not tem_conclusao)
+
+                    btn_salvar_edicao = st.form_submit_button("💾 Salvar Alterações")
+
+                    if btn_salvar_edicao:
+                        df_bruto.loc[idx, "PROJETO"] = edit_nome
+                        df_bruto.loc[idx, "TIPO"] = edit_tipo
+                        df_bruto.loc[idx, "RESPONSAVEL"] = edit_resp
+                        df_bruto.loc[idx, "INICIO"] = edit_inicio
+                        df_bruto.loc[idx, "PRAZO FINAL"] = edit_prazo
+                        df_bruto.loc[idx, "DATA CONCLUSAO"] = edit_conclusao if tem_conclusao else None
+
+                        if salvar_dados_gsheets(df_bruto):
+                            st.success(f"✅ Projeto '{edit_nome}' atualizado com sucesso!")
+                            st.rerun()
+            else:
+                st.info("Nenhum projeto cadastrado para editar.")
+
+        # ABA 3: REMOÇÃO DE PROJETO
+        with aba_remover:
+            st.subheader("🗑️ Remover Projeto")
+            if not df_bruto.empty:
+                projeto_rem = st.selectbox("Selecione o Projeto para Excluir:", df_bruto["PROJETO"].dropna().unique(), key="select_remover")
+                
+                st.warning(f"⚠️ Tem certeza que deseja excluir o projeto **'{projeto_rem}'**? Esta ação alterará a planilha no Google Sheets.")
+                if st.button("❌ Confirmar Exclusão"):
+                    df_novo = df_bruto[df_bruto["PROJETO"] != projeto_rem].copy()
+                    if salvar_dados_gsheets(df_novo):
+                        st.success(f"🗑️ Projeto '{projeto_rem}' removido com sucesso!")
+                        st.rerun()
+            else:
+                st.info("Nenhum projeto cadastrado para remover.")
+
+    # ---------------------------------------------------------
+    # 3. MÓDULO DE RELATÓRIOS
+    # ---------------------------------------------------------
     elif opcao == "📋 Relatórios Ambientais":
         st.title("📋 Relatório Geral de Projetos e Serviços")
 
