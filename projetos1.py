@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 import os
-from streamlit_gsheets import GSheetsConnection
 
 # Configuração da página
 st.set_page_config(
@@ -41,62 +40,45 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+EXCEL_FILE = "Projetos_sanear.xlsx"
 LOGO_FILE = "docx_extracted/word/media/image1.jpeg"  # Caminho da imagem/logo do SANEAR
 
-# --- CONEXÃO COM GOOGLE SHEETS ---
-@st.cache_resource(ttl=60)
-def obter_conexao_gsheets():
-    return st.connection("gsheets", type=GSheetsConnection)
+# Colunas padrão do sistema com a nova coluna "TIPO"
+COLUNAS_PADRAO = ["PROJETO", "TIPO", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO"]
 
-# Função para carregar os dados das abas
-def carregar_dados_pac():
-    conn = obter_conexao_gsheets()
+# Função para carregar e tratar os dados da planilha
+def carregar_dados():
     try:
-        # Lê a aba NovoPac da planilha PROJETOS_SANEAR
-        df = conn.read(worksheet="NovoPac", ttl="0s")
-        df = df.dropna(how="all")  # Remove linhas totalmente vazias
-        
-        # Conversão de datas
-        colunas_data = ['INICIO', 'PRAZO FINAL', 'DATA CONCLUSAO']
-        for col in colunas_data:
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
-        return df
-    except Exception as e:
-        st.error(f"Erro ao carregar a aba 'NovoPac' no Google Sheets: {e}")
-        return pd.DataFrame(columns=["PROJETO", "Material/Serviço", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO"])
+        if os.path.exists(EXCEL_FILE):
+            df = pd.read_excel(EXCEL_FILE)
+            
+            # Limpa espaços em branco acidentais no cabeçalho
+            df.columns = df.columns.str.strip()
+            
+            # Garante a existência de todas as colunas obrigatórias
+            for col in COLUNAS_PADRAO:
+                if col not in df.columns:
+                    df[col] = None
 
-def carregar_servidores():
-    conn = obter_conexao_gsheets()
-    try:
-        # Lê a aba Servidor para obter a lista de responsáveis
-        df_serv = conn.read(worksheet="Servidor", ttl="60s")
-        df_serv = df_serv.dropna(how="all")
-        if "NOME" in df_serv.columns:
-            return df_serv["NOME"].dropna().unique().tolist()
-        elif "RESPONSAVEL" in df_serv.columns:
-            return df_serv["RESPONSAVEL"].dropna().unique().tolist()
+            # Tratamento de datas
+            for col_data in ['INICIO', 'PRAZO FINAL', 'DATA CONCLUSAO']:
+                df[col_data] = pd.to_datetime(df[col_data], errors='coerce').dt.date
+                
+            return df[COLUNAS_PADRAO]
         else:
-            return df_serv.iloc[:, 0].dropna().unique().tolist()
+            return pd.DataFrame(columns=COLUNAS_PADRAO)
+            
     except Exception as e:
-        st.warning(f"Não foi possível carregar a lista de servidores da aba 'Servidor': {e}")
-        return []
+        st.error(f"Erro ao carregar o arquivo {EXCEL_FILE}: {e}")
+        return pd.DataFrame(columns=COLUNAS_PADRAO)
 
-# Função para atualizar a aba NovoPac
-def salvar_dados_pac(df):
-    conn = obter_conexao_gsheets()
+# Função para salvar alterações na planilha
+def salvar_dados(df):
     try:
-        # Garante a formatação de data para texto simples antes de enviar
-        df_salvar = df.copy()
-        for col in ['INICIO', 'PRAZO FINAL', 'DATA CONCLUSAO']:
-            if col in df_salvar.columns:
-                df_salvar[col] = df_salvar[col].apply(
-                    lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) and isinstance(x, (date, datetime)) else ""
-                )
-        conn.update(worksheet="NovoPac", data=df_salvar)
-        st.success("💧 Dados atualizados no Google Sheets com sucesso!")
+        df.to_excel(EXCEL_FILE, index=False)
+        st.success("💧 Dados salvos com sucesso!")
     except Exception as e:
-        st.error(f"Erro ao salvar alterações no Google Sheets: {e}")
+        st.error(f"Erro ao salvar alterações no arquivo: {e}")
 
 # Função para calcular status e dias de atraso
 def calcular_status(df):
@@ -105,8 +87,8 @@ def calcular_status(df):
     dias_atraso_list = []
 
     for index, row in df.iterrows():
-        prazo = row.get('PRAZO FINAL', pd.NaT)
-        conclusao = row.get('DATA CONCLUSAO', pd.NaT)
+        prazo = row['PRAZO FINAL']
+        conclusao = row['DATA CONCLUSAO']
 
         if pd.notna(conclusao):
             status_list.append("Concluído")
@@ -123,7 +105,7 @@ def calcular_status(df):
     df['DIAS DE ATRASO'] = dias_atraso_list
     return df
 
-# Formatação de data DD/MM/AAAA para exibição
+# Formatação de data DD/MM/AAAA
 def formatar_datas_para_exibicao(df):
     df_exibicao = df.copy()
     colunas_data = ['INICIO', 'PRAZO FINAL', 'DATA CONCLUSAO']
@@ -134,16 +116,15 @@ def formatar_datas_para_exibicao(df):
             )
     return df_exibicao
 
-# Estilo visual com cores de fundo para a tabela inteira (Atrasado vs Em Dia)
-def estilar_linha_status(row):
-    status = row.get('STATUS', '')
-    if status == 'Em Atraso':
-        # Cor de fundo vermelho suave para projetos em atraso
-        return ['background-color: #ffcdd2; color: #b71c1c; font-weight: bold;'] * len(row)
-    elif status in ['Em Andamento', 'Concluído']:
-        # Cor de fundo verde suave para projetos em dia / concluídos
-        return ['background-color: #c8e6c9; color: #1b5e20; font-weight: bold;'] * len(row)
-    return [''] * len(row)
+# Estilo visual de cores do SANEAR para as tabelas
+def estilar_status(val):
+    if val == 'Em Atraso':
+        return 'background-color: #ffebee; color: #c62828; font-weight: bold;'
+    elif val == 'Concluído':
+        return 'background-color: #e8f5e9; color: #2e7d32; font-weight: bold;'
+    elif val == 'Em Andamento':
+        return 'background-color: #e3f2fd; color: #1565c0; font-weight: bold;'
+    return ''
 
 # --- MÓDULO DE AUTENTICAÇÃO ---
 def autenticacao():
@@ -167,28 +148,28 @@ def autenticacao():
 
 # --- APLICAÇÃO PRINCIPAL ---
 if autenticacao():
+    # Exibir Logotipo na Barra Lateral se existir
     if os.path.exists(LOGO_FILE):
         st.sidebar.image(LOGO_FILE, use_container_width=True)
     else:
         st.sidebar.markdown("## 💧 **SANEAR**")
 
-    st.sidebar.title("🌊 Navegação")
+    ##st.sidebar.title("🌊 Navegação")
     opcao = st.sidebar.radio(
         "Selecione um módulo:",
-        ["🏗️ Módulo Novo PAC", "📋 Relatórios Ambientais", "🛠️ Inserção e Gestão"]
+        ["📊 Dashboard & Prazos", "📋 Relatórios Ambientais", "🛠️ Inserção e Gestão"]
     )
     
     if st.sidebar.button("🔒 Sair / Logout"):
         st.session_state["autenticado"] = False
         st.rerun()
 
-    df_bruto = carregar_dados_pac()
+    df_bruto = carregar_dados()
     df_calculado = calcular_status(df_bruto)
-    lista_servidores = carregar_servidores()
 
-    # 1. DASHBOARD MÓDULO NOVO PAC
-    if opcao == "🏗️ Módulo Novo PAC":
-        st.title("🏗️ Módulo Novo PAC - Dashboard de Projetos")
+    # 1. DASHBOARD DE APRESENTAÇÃO
+    if opcao == "📊 Dashboard & Prazos":
+        st.title("💧 Painel de Gestão de Projetos - SANEAR")
         
         # Indicadores Chave
         col1, col2, col3, col4 = st.columns(4)
@@ -199,42 +180,47 @@ if autenticacao():
 
         st.markdown("---")
 
-        # Legenda das Cores
-        st.markdown("""
-        **Legenda de Destaque Visual:**
-        * <span style="background-color: #ffcdd2; color: #b71c1c; padding: 4px 8px; border-radius: 4px; font-weight: bold;">Projetos em Atraso</span>
-        * <span style="background-color: #c8e6c9; color: #1b5e20; padding: 4px 8px; border-radius: 4px; font-weight: bold;">Projetos Em Dia / Concluídos</span>
-        """, unsafe_allow_html=True)
-        st.write("")
-
-        # Tabela Geral com Destacamento de Cores
-        st.subheader("📋 Acompanhamento de Projetos Novo PAC")
-        df_geral_fmt = formatar_datas_para_exibicao(df_calculado)
-        cols_ordem = ["PROJETO", "Material/Serviço", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO", "STATUS", "DIAS DE ATRASO"]
+        # Seção de Alerta de Projetos em Atraso
+        df_atrasados = df_calculado[df_calculado['STATUS'] == "Em Atraso"].sort_values(by="DIAS DE ATRASO", ascending=False)
+        st.subheader("🚨 Projetos Com Prazos Vencidos")
         
-        cols_existentes = [col for col in cols_ordem if col in df_geral_fmt.columns]
+        if not df_atrasados.empty:
+            df_atrasados_fmt = formatar_datas_para_exibicao(df_atrasados)
+            st.dataframe(
+                df_atrasados_fmt[["PROJETO", "TIPO", "RESPONSAVEL", "PRAZO FINAL", "DIAS DE ATRASO", "STATUS"]].style.map(estilar_status, subset=['STATUS']),
+                use_container_width=True
+            )
+        else:
+            st.success("🌿 Excelente! Nenhum projeto em atraso no momento.")
+
+        st.markdown("---")
+
+        # Tabela Geral
+        st.subheader("📋 Acompanhamento de Prazos e Conclusão")
+        df_geral_fmt = formatar_datas_para_exibicao(df_calculado)
+        cols_ordem = ["PROJETO", "TIPO", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO", "STATUS", "DIAS DE ATRASO"]
         
         st.dataframe(
-            df_geral_fmt[cols_existentes].style.apply(estilar_linha_status, axis=1),
+            df_geral_fmt[cols_ordem].style.map(estilar_status, subset=['STATUS']),
             use_container_width=True
         )
 
     # 2. MÓDULO DE RELATÓRIOS
     elif opcao == "📋 Relatórios Ambientais":
-        st.title("📋 Relatório Geral de Projetos e Serviços (Novo PAC)")
+        st.title("📋 Relatório Geral de Projetos e Serviços")
 
         st.subheader("🔍 Filtros de Consulta")
         col_f1, col_f2 = st.columns(2)
 
-        responsaveis = ["Todos"] + list(df_calculado['RESPONSAVEL'].dropna().unique()) if 'RESPONSAVEL' in df_calculado.columns else ["Todos"]
+        responsaveis = ["Todos"] + list(df_calculado['RESPONSAVEL'].dropna().unique())
         resp_sel = col_f1.selectbox("👤 Responsável:", responsaveis)
 
         status_opcoes = ["Todos", "Em Atraso", "Em Andamento", "Concluído"]
         status_sel = col_f2.selectbox("📌 Status do Projeto:", status_opcoes)
 
-        # Aplicação dos filtros
+        # Filtros
         df_filtrado = df_calculado.copy()
-        if resp_sel != "Todos" and 'RESPONSAVEL' in df_filtrado.columns:
+        if resp_sel != "Todos":
             df_filtrado = df_filtrado[df_filtrado['RESPONSAVEL'] == resp_sel]
         if status_sel != "Todos":
             df_filtrado = df_filtrado[df_filtrado['STATUS'] == status_sel]
@@ -244,7 +230,7 @@ if autenticacao():
         
         df_filtrado_fmt = formatar_datas_para_exibicao(df_filtrado)
         st.dataframe(
-            df_filtrado_fmt.style.apply(estilar_linha_status, axis=1),
+            df_filtrado_fmt.style.map(estilar_status, subset=['STATUS']),
             use_container_width=True
         )
 
@@ -253,65 +239,57 @@ if autenticacao():
         st.download_button(
             label="📥 Exportar Relatório em CSV",
             data=csv,
-            file_name="relatorio_projetos_novo_pac.csv",
+            file_name="relatorio_projetos_sanear.csv",
             mime="text/csv"
         )
 
     # 3. INSERÇÃO E EDIÇÃO DE DADOS
     elif opcao == "🛠️ Inserção e Gestão":
-        st.title("🛠️ Cadastrar e Atualizar Projetos (Novo PAC)")
+        st.title("🛠️ Cadastrar e Atualizar Projetos")
 
         aba_novo, aba_editar = st.tabs(["➕ Novo Projeto / Serviço", "✏️ Atualizar Status / Conclusão"])
 
         # Cadastro de novos projetos
         with aba_novo:
-            st.subheader("Cadastrar Novo Projeto na Planilha NovoPac")
+            st.subheader("Cadastrar Nova Demanda")
             with st.form("form_novo_projeto"):
                 novo_nome = st.text_input("🏷️ Nome do Projeto / Obra")
-                novo_tipo = st.selectbox("📦 Material / Serviço", ["Material", "Serviço", "Outro"])
-                
-                # Seleção do Responsável buscando da planilha Servidor
-                if lista_servidores:
-                    novo_resp = st.selectbox("👤 Responsável Técnico (Aba Servidor)", lista_servidores)
-                else:
-                    novo_resp = st.text_input("👤 Responsável Técnico")
-
+                novo_tipo = st.selectbox("📦 Tipo", ["Material", "Serviço", "Outro"])
+                novo_resp = st.text_input("👤 Responsável Técnico")
                 novo_inicio = st.date_input("📅 Data de Início", value=date.today(), format="DD/MM/YYYY")
                 novo_prazo = st.date_input("⏳ Prazo Final Previsto", value=date.today(), format="DD/MM/YYYY")
 
-                btn_cadastrar = st.form_submit_button("💾 Salvar Projeto no Google Sheets")
+                btn_cadastrar = st.form_submit_button("💾 Salvar Projeto")
 
                 if btn_cadastrar:
                     if novo_nome and novo_resp:
                         novo_registro = pd.DataFrame([{
                             "PROJETO": novo_nome,
-                            "Material/Serviço": novo_tipo,
+                            "TIPO": novo_tipo,
                             "RESPONSAVEL": novo_resp,
                             "INICIO": novo_inicio,
                             "PRAZO FINAL": novo_prazo,
                             "DATA CONCLUSAO": None
                         }])
-                        cols_base = ["PROJETO", "Material/Serviço", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO"]
-                        df_atualizado = pd.concat([df_bruto[cols_base], novo_registro], ignore_index=True)
-                        salvar_dados_pac(df_atualizado)
+                        df_atualizado = pd.concat([df_bruto[COLUNAS_PADRAO], novo_registro], ignore_index=True)
+                        salvar_dados(df_atualizado)
                         st.rerun()
                     else:
                         st.warning("⚠️ Preencha os campos obrigatórios (Nome do Projeto e Responsável).")
 
         # Atualização de Projetos
         with aba_editar:
-            st.subheader("Registrar Conclusão / Atualizar Data")
-            if not df_bruto.empty and "PROJETO" in df_bruto.columns:
+            st.subheader("Registrar Conclusão de Projeto")
+            if not df_bruto.empty:
                 projeto_sel = st.selectbox("Selecione o Projeto:", df_bruto['PROJETO'].unique())
                 idx = df_bruto[df_bruto['PROJETO'] == projeto_sel].index[0]
 
                 data_atual_conc = df_bruto.loc[idx, 'DATA CONCLUSAO']
-                val_inicial_conc = data_atual_conc if pd.notna(data_atual_conc) and isinstance(data_atual_conc, date) else date.today()
+                val_inicial_conc = data_atual_conc if pd.notna(data_atual_conc) else date.today()
 
                 nova_conclusao = st.date_input("✅ Data de Conclusão Efetiva:", value=val_inicial_conc, format="DD/MM/YYYY")
 
-                if st.button("💾 Salvar Conclusão no Google Sheets"):
+                if st.button("💾 Registrar Conclusão"):
                     df_bruto.loc[idx, 'DATA CONCLUSAO'] = nova_conclusao
-                    cols_salvar = ["PROJETO", "Material/Serviço", "RESPONSAVEL", "INICIO", "PRAZO FINAL", "DATA CONCLUSAO"]
-                    salvar_dados_pac(df_bruto[cols_salvar])
+                    salvar_dados(df_bruto[COLUNAS_PADRAO])
                     st.rerun()
