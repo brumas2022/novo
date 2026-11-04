@@ -145,11 +145,11 @@ def calcular_status(df):
                 dias_atraso_list.append(0)
                 cor_linha_list.append("amarelo")
             else:
-                status_list.append("No Prazo")
+                status_list.append("Em Andamento (No Prazo)")
                 dias_atraso_list.append(0)
                 cor_linha_list.append("verde")
         else:
-            status_list.append("Sem Prazo")
+            status_list.append("Em Andamento (Sem Prazo)")
             dias_atraso_list.append(0)
             cor_linha_list.append("verde")
 
@@ -158,7 +158,7 @@ def calcular_status(df):
     df['COR_LINHA'] = cor_linha_list
     return df
 
-# Função para destacar a LINHA INTEIRA na tabela de acordo com o status
+# Função para destacar a LINHA INTEIRA na tabela de acordo com o status/cor
 def estilar_linha_inteira(row):
     cor = row.get('COR_LINHA', '')
     if cor == 'vermelho':
@@ -232,7 +232,7 @@ if autenticacao():
         
         # Métricas calculadas
         total_projetos = len(df_calculado)
-        no_prazo = len(df_calculado[df_calculado['COR_LINHA'] == "verde"])
+        em_andamento_verde = len(df_calculado[df_calculado['COR_LINHA'] == "verde"])
         prox_vencimento = len(df_calculado[df_calculado['COR_LINHA'] == "amarelo"])
         em_atraso = len(df_calculado[df_calculado['COR_LINHA'] == "vermelho"])
 
@@ -249,15 +249,15 @@ if autenticacao():
         with c2:
             st.markdown(f"""
                 <div class="card-dashboard card-verde">
-                    <div class="card-title">✅ No Prazo / Concluídos</div>
-                    <div class="card-num">{no_prazo}</div>
+                    <div class="card-title">🟢 Em Andamento / Concluídos</div>
+                    <div class="card-num">{em_andamento_verde}</div>
                 </div>
             """, unsafe_allow_html=True)
 
         with c3:
             st.markdown(f"""
                 <div class="card-dashboard card-amarelo">
-                    <div class="card-title">⚠️ Próximo Vencimento (7d)</div>
+                    <div class="card-title">🟡 Próximo do Vencimento</div>
                     <div class="card-num">{prox_vencimento}</div>
                 </div>
             """, unsafe_allow_html=True)
@@ -265,7 +265,7 @@ if autenticacao():
         with c4:
             st.markdown(f"""
                 <div class="card-dashboard card-vermelho">
-                    <div class="card-title">🚨 Em Atraso</div>
+                    <div class="card-title">🔴 Em Atraso</div>
                     <div class="card-num">{em_atraso}</div>
                 </div>
             """, unsafe_allow_html=True)
@@ -279,7 +279,8 @@ if autenticacao():
         if not df_calculado.empty:
             df_geral_fmt = formatar_datas_para_exibicao(df_calculado)
             st.dataframe(
-                df_geral_fmt[cols_exibicao].style.apply(estilar_linha_inteira, axis=1),
+                df_geral_fmt[cols_exibicao + ['COR_LINHA']].style.apply(estilar_linha_inteira, axis=1),
+                column_config={"COR_LINHA": None},  # Oculta a coluna auxiliar de cor visualmente
                 use_container_width=True
             )
         else:
@@ -413,7 +414,7 @@ if autenticacao():
         responsaveis = ["Todos"] + list(df_calculado['RESPONSAVEL'].dropna().unique())
         resp_sel = col_f1.selectbox("👤 Responsável:", responsaveis)
 
-        status_opcoes = ["Todos", "No Prazo", "Próximo do Vencimento", "Em Atraso", "Concluído"]
+        status_opcoes = ["Todos", "Em Andamento (No Prazo)", "Próximo do Vencimento", "Em Atraso", "Concluído"]
         status_sel = col_f2.selectbox("📌 Status do Projeto:", status_opcoes)
 
         df_filtrado = df_calculado.copy()
@@ -429,7 +430,8 @@ if autenticacao():
         df_filtrado_fmt = formatar_datas_para_exibicao(df_filtrado)
         
         st.dataframe(
-            df_filtrado_fmt[cols_exibicao].style.apply(estilar_linha_inteira, axis=1),
+            df_filtrado_fmt[cols_exibicao + ['COR_LINHA']].style.apply(estilar_linha_inteira, axis=1),
+            column_config={"COR_LINHA": None},
             use_container_width=True
         )
 
